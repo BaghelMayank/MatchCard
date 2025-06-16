@@ -13,14 +13,19 @@ public class GameManager : MonoBehaviour
     private List<int> cardIDs = new List<int>();
     void Start()
     {
-        
+        GenerateGrid();
     }
 
     void GenerateGrid()
     {
+       
         int totalCards = gridSize.x * gridSize.y;
         int totalPairs = totalCards / 2;
-        
+        if (cardFaces.Length < totalPairs)
+        {
+            Debug.LogError("Not enough card face sprites assigned!");
+            return;
+        }
         List<int> pairIDs = new List<int>();
         for (int i = 0; i < totalPairs; i++)
         {
