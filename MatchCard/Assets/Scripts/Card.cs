@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.UI.ProceduralImage;
 
 public class Card : MonoBehaviour
 {
