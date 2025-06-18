@@ -11,8 +11,11 @@ public class GameManager : MonoBehaviour
     public GridLayoutGroup gridLayoutGroup;
     public TextMeshProUGUI scoreText, comboText, levelText;
     public GameObject levelCompletePanel;
+    [SerializeField] private GameObject winPanel;
+    [SerializeField] private TextMeshProUGUI finalScoreText;
     public List<LevelData> levels = new List<LevelData>();
 
+    
     private Vector2Int gridSize;
     private int currentLevelIndex = 0;
     private int score = 0, comboMultiplier = 0, matchStreak = 0, matchedPairs = 0;
@@ -20,6 +23,7 @@ public class GameManager : MonoBehaviour
 
     private Card firstFlipped, secondFlipped;
     private List<Card> spawnedCards = new List<Card>();
+    
 
     void Start()
     {
@@ -164,6 +168,8 @@ public class GameManager : MonoBehaviour
         else
         {
             Debug.Log("Game completed!");
+            winPanel.SetActive(true);
+            finalScoreText.text = "Final Score: " + score;
             PlayerPrefs.DeleteKey("SaveData");
         }
     }
@@ -238,7 +244,7 @@ public class GameManager : MonoBehaviour
         gridSize = new Vector2Int(data.gridWidth, data.gridHeight);
         matchedPairs = 0;
         ClearBoard();
-
+        if (levelText) levelText.text = $"Level: {currentLevelIndex + 1}";
         gridLayoutGroup.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
         gridLayoutGroup.constraintCount = gridSize.x;
 
@@ -265,10 +271,15 @@ public class GameManager : MonoBehaviour
             card.cardButton.onClick.AddListener(() => OnCardClick(card));
             spawnedCards.Add(card);
         }
-
+        StartCoroutine(PreviewCards());
         UpdateScore();
         Debug.Log("Game Loaded: Level " + currentLevelIndex);
+        
     }
-
+    public void RestartGame()
+    {
+        PlayerPrefs.DeleteAll();
+        UnityEngine.SceneManagement.SceneManager.LoadScene(0); 
+    }
     void OnApplicationQuit() => SaveGame();
 }
