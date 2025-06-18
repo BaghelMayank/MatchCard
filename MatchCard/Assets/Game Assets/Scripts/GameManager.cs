@@ -36,12 +36,14 @@ public class GameManager : MonoBehaviour
     public AudioClip flipClip;
     public AudioClip matchClip;
     public AudioClip winClip;
+    public AudioClip mismatchClip;
+    public GameObject volumeoff;
     
     private Vector2Int gridSize;
     private int currentLevelIndex = 0;
     private int score = 0, comboMultiplier = 0, matchStreak = 0, matchedPairs = 0;
     private bool isChecking = false;
-
+    bool musicEnabled;
     private Card firstFlipped, secondFlipped;
     private List<Card> spawnedCards = new();
 
@@ -49,7 +51,16 @@ public class GameManager : MonoBehaviour
     {
         comboText.gameObject.SetActive(false);
         gamePanel.SetActive(false);
-        musicSource.mute = PlayerPrefs.GetInt("MusicEnabled", 1) == 0;
+       
+        musicEnabled = PlayerPrefs.GetInt("MusicEnabled", 1) == 1;
+        musicSource.mute = !musicEnabled;
+        volumeoff.SetActive(!musicEnabled);
+
+        if (musicEnabled && !musicSource.isPlaying && musicSource.clip != null)
+        {
+            musicSource.Play();
+        }
+        // MaxUnlockedLevel setup
         if (!PlayerPrefs.HasKey("MaxUnlockedLevel"))
         {
             PlayerPrefs.SetInt("MaxUnlockedLevel", 0);
@@ -57,7 +68,7 @@ public class GameManager : MonoBehaviour
         }
 
         if (TryLoadGame(out SaveData data))
-        {
+        { 
             LoadLevel(data);
             gamePanel.SetActive(true);
         }
@@ -206,6 +217,7 @@ public class GameManager : MonoBehaviour
             score -= 2;
             matchStreak = 0;
             comboMultiplier = 1;
+            sfxSource.PlayOneShot(mismatchClip);
         }
 
         UpdateScore();
@@ -316,7 +328,11 @@ public class GameManager : MonoBehaviour
 
         string json = PlayerPrefs.GetString("SaveData");
         data = JsonUtility.FromJson<SaveData>(json);
-        if (data.saveVersion != 1 || data.cardStates == null || data.cardStates.Count == 0) return false;
+        if (data == null || data.saveVersion != 1 || data.cardStates == null || data.cardStates.Count == 0)
+        {
+            PlayerPrefs.DeleteKey("SaveData");
+            return false;
+        }
         return true;
     }
 
@@ -363,11 +379,22 @@ public class GameManager : MonoBehaviour
         StartCoroutine(PreviewCards());
         UpdateScore();
     }
-    public void ToggleMusic(bool isOn)
+    public void ToggleMusic()
     {
-        musicSource.mute = !isOn;
-        PlayerPrefs.SetInt("MusicEnabled", isOn ? 1 : 0);
+        bool isMuted = musicSource.mute;
+        musicSource.mute = !isMuted;
+
+        volumeoff.SetActive(!isMuted);
+
+        PlayerPrefs.SetInt("MusicEnabled", musicSource.mute ? 0 : 1);
+        PlayerPrefs.Save();
+
+        if (!musicSource.mute && !musicSource.isPlaying && musicSource.clip != null)
+        {
+            musicSource.Play();
+        }
     }
+
     public void BackToLevelSelect()
     {
         ClearBoard();
