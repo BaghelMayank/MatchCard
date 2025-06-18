@@ -2,100 +2,86 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
     public GameObject cardPrefab;
     public Transform cardsParent;
-    public Sprite[] cardFaces;
+    public GridLayoutGroup gridLayoutGroup;
+    public TextMeshProUGUI scoreText, comboText, levelText;
+    public GameObject levelCompletePanel;
+    public List<LevelData> levels = new List<LevelData>();
 
-    private Card firstFlipped = null;
-    private Card secondFlipped = null;
+    private Vector2Int gridSize;
+    private int currentLevelIndex = 0;
+    private int score = 0, comboMultiplier = 0, matchStreak = 0, matchedPairs = 0;
     private bool isChecking = false;
-    
-    [SerializeField] private Vector2Int gridSize = new Vector2Int(2,2);
-    private List<Card> spawnedCards = new List<Card>();
-    private List<int> cardIDs = new List<int>();
 
-    private int score = 0;
-    private int comboMultiplier = 0;
-    private int matchStreak = 0;
-    
-    public TextMeshProUGUI scoreText;
-    public TextMeshProUGUI comboText;
-    
+    private Card firstFlipped, secondFlipped;
+    private List<Card> spawnedCards = new List<Card>();
 
     void Start()
     {
         comboText.gameObject.SetActive(false);
-        GenerateGrid();
-        Invoke(nameof(LoadGame),0.5f);
-    }
 
-    void LoadGame()
-    {
-        if(!PlayerPrefs.HasKey("SaveData"))
-            return;
-        
-        string json = PlayerPrefs.GetString("SaveData");
-        SaveData data = JsonUtility.FromJson<SaveData>(json);
-        
-        score = data.score;
-        comboMultiplier = data.comboMultiplier;
-        matchStreak = data.matchStreak;
-        
-        UpdateScore();
-
-        for (int i = 0; i < data.cardStates.Count; i++)
+        if (TryLoadGame(out SaveData data))
         {
-            Card card = spawnedCards[i];
-            card.cardID = data.cardStates[i].cardID;
-            card.Init(card.cardID,cardFaces[card.cardID]);
-
-            if (data.cardStates[i].isMatched)
-            {
-                card.Flip();
-                card.cardButton.interactable = false;
-            }
-            else
-            {
-                card.ResetCard();
-                card.cardButton.interactable = true;
-            }
+            LoadLevel(data);
+            Debug.Log("Previous Data: " + data.saveVersion);
         }
-        Debug.Log("Game Loaded");
+        else
+        {
+            GenerateGrid();
+        }
+    }
+    void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            PlayerPrefs.DeleteAll();
+            UnityEngine.SceneManagement.SceneManager.LoadScene(0);
+        }
     }
     void GenerateGrid()
     {
-       
-        int totalCards = gridSize.x * gridSize.y;
-        int totalPairs = totalCards / 2;
-        if (cardFaces.Length < totalPairs)
+        Debug.Log("Generating Grid for Level " + currentLevelIndex);
+        matchedPairs = 0;
+
+        ClearBoard();
+
+        LevelData level = levels[currentLevelIndex];
+        gridSize = level.gridSize;
+        Sprite[] faces = level.levelCardFaces;
+
+        if (levelText) levelText.text = $"Level: {currentLevelIndex + 1}";
+        gridLayoutGroup.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        gridLayoutGroup.constraintCount = gridSize.x;
+
+        int total = gridSize.x * gridSize.y;
+        int pairs = total / 2;
+
+        if (faces.Length < pairs)
         {
-            Debug.LogError("Not enough card face sprites assigned!");
+            Debug.LogError("Not enough faces assigned.");
             return;
         }
+
         List<int> pairIDs = new List<int>();
-        for (int i = 0; i < totalPairs; i++)
-        {
-            pairIDs.Add(i);
-            pairIDs.Add(i);
-        }
-        
+        for (int i = 0; i < pairs; i++) { pairIDs.Add(i); pairIDs.Add(i); }
         Shuffle(pairIDs);
-       
-        for (int i = 0; i < totalCards; i++)
+
+        for (int i = 0; i < total; i++)
         {
             GameObject obj = Instantiate(cardPrefab, cardsParent);
             Card card = obj.GetComponent<Card>();
-            Card capturedCard = card;
-            card.Init(pairIDs[i],cardFaces[pairIDs[i]]);
-            capturedCard.cardButton.onClick.AddListener(() => OnCardClick(capturedCard));
+            card.Init(pairIDs[i], faces[pairIDs[i]]);
+            card.cardButton.onClick.AddListener(() => OnCardClick(card));
             spawnedCards.Add(card);
         }
+
         StartCoroutine(PreviewCards());
     }
-
     void Shuffle(List<int> list)
     {
         for (int i = 0; i < list.Count; i++)
@@ -104,120 +90,185 @@ public class GameManager : MonoBehaviour
             (list[i],list[rand]) = (list[rand], list[i]);
         }
     }
-
-    void OnCardClick(Card clickedCard)
+    void OnCardClick(Card clicked)
     {
-        Debug.Log("Card Clicked: " + clickedCard.cardID);
-        if(isChecking || clickedCard == firstFlipped || clickedCard == secondFlipped)
-            return;
-        clickedCard.Flip();
+        if (isChecking || clicked == firstFlipped || clicked == secondFlipped) return;
+        clicked.Flip();
 
-        if (firstFlipped == null)
+        if (firstFlipped == null) firstFlipped = clicked;
+        else
         {
-            firstFlipped = clickedCard;
-        }
-        else if (secondFlipped == null)
-        {
-            secondFlipped = clickedCard;
+            secondFlipped = clicked;
             isChecking = true;
             StartCoroutine(CheckMatch());
         }
-        Debug.Log("Checking Bool: " + isChecking);
     }
 
     IEnumerator CheckMatch()
     {
-        
         yield return new WaitForSeconds(1f);
 
         if (firstFlipped.cardID == secondFlipped.cardID)
         {
             firstFlipped.cardButton.interactable = false;
             secondFlipped.cardButton.interactable = false;
-
+            matchedPairs++;
             matchStreak++;
             comboMultiplier = matchStreak;
-
-            int gainedPoints = 10 * comboMultiplier;
-            score += gainedPoints;
-            
-            Debug.Log($"Match! +{gainedPoints} points (Combo x{comboMultiplier})");
-            comboText.gameObject.SetActive(true);
-            comboText.text = "Combo X : " + comboMultiplier;
-            yield return new WaitForSeconds(0.5f);
-            comboText.gameObject.SetActive(false);
+            score += 10 * comboMultiplier;
+            if (comboText!=null) 
+            { 
+                comboText.gameObject.SetActive(true);
+                comboText.text = "Combo X: " + comboMultiplier; 
+                yield return new WaitForSeconds(1f);
+                comboText.gameObject.SetActive(false);
+                
+            }
         }
         else
         {
             firstFlipped.ResetCard();
             secondFlipped.ResetCard();
-
-            score -= 2; //for mismatch -2 points
+            score -= 2;
             matchStreak = 0;
             comboMultiplier = 1;
-            
-            Debug.Log("Mismatch! -2 points");
-
         }
-       
-        firstFlipped = null;
-        secondFlipped = null;
-        isChecking = false;
+
         UpdateScore();
 
+        if (matchedPairs == (gridSize.x * gridSize.y) / 2)
+        {
+            Debug.Log("Level Complete");
+            StartCoroutine(ShowLevelComplete());
+        }
+
+        firstFlipped = secondFlipped = null;
+        isChecking = false;
     }
 
-    void UpdateScore()
+    IEnumerator ShowLevelComplete()
     {
-        if(scoreText != null) scoreText.text = "Score: " + score;
+        levelCompletePanel.SetActive(true);
+        yield return new WaitForSeconds(2);
+        levelCompletePanel.SetActive(false);
+        matchStreak = 0;
+        comboMultiplier = 1;
+        comboText.text = "Combo X: " + comboMultiplier;
+
+        currentLevelIndex++;
+        if (currentLevelIndex < levels.Count)
+        {
+            GenerateGrid();
+            SaveGame();
+        }
+        else
+        {
+            Debug.Log("Game completed!");
+            PlayerPrefs.DeleteKey("SaveData");
+        }
+    }
+
+    void ClearBoard()
+    {
+        foreach (Transform t in cardsParent) Destroy(t.gameObject);
+        spawnedCards.Clear();
+        firstFlipped = secondFlipped = null;
     }
 
     IEnumerator PreviewCards()
     {
-        // Flip all cards face up
-        foreach (var card in spawnedCards)
-        {
-            card.Flip();
-            card.cardButton.interactable = false;
-        }
-
+        foreach (var card in spawnedCards) { card.Flip(); card.cardButton.interactable = false; }
         yield return new WaitForSeconds(1.5f);
+        foreach (var card in spawnedCards) { card.ResetCard(); card.cardButton.interactable = true; }
+    }
 
-        // Flip all cards face down
-        foreach (var card in spawnedCards)
-        {
-            card.ResetCard();
-            card.cardButton.interactable = true;
-        }
+    void UpdateScore()
+    {
+        if (scoreText) scoreText.text = "Score: " + score;
+       
     }
 
     void SaveGame()
     {
-        SaveData data = new SaveData();
-        data.score = score;
-        data.comboMultiplier = comboMultiplier;
-        data.matchStreak = matchStreak;
-        
-        data.cardStates = new List<CardState>();
-        foreach (Card card in spawnedCards)
+        SaveData data = new SaveData
         {
-            CardState state = new CardState
+            score = score,
+            comboMultiplier = comboMultiplier,
+            matchStreak = matchStreak,
+            currentLevelIndex = currentLevelIndex,
+            gridWidth = gridSize.x,
+            gridHeight = gridSize.y,
+            saveVersion = 1,
+            cardStates = new List<CardState>()
+        };
+
+        foreach (var card in spawnedCards)
+        {
+            data.cardStates.Add(new CardState
             {
                 cardID = card.cardID,
                 isMatched = !card.cardButton.interactable
-
-            };
-            data.cardStates.Add(state);
+            });
         }
-        
-        string json = JsonUtility.ToJson(data);
-        PlayerPrefs.SetString("SaveData", json);
+
+        PlayerPrefs.SetString("SaveData", JsonUtility.ToJson(data));
         PlayerPrefs.Save();
-        
         Debug.Log("Game Saved");
     }
-    void OnApplicationQuit()
+
+    bool TryLoadGame(out SaveData data)
     {
-        SaveGame();
+        data = null;
+        if (!PlayerPrefs.HasKey("SaveData")) return false;
+
+        string json = PlayerPrefs.GetString("SaveData");
+        data = JsonUtility.FromJson<SaveData>(json);
+        if (data.saveVersion != 1 || data.cardStates == null || data.cardStates.Count == 0) return false;
+        return true;
     }
+
+    void LoadLevel(SaveData data)
+    {
+        currentLevelIndex = data.currentLevelIndex;
+        score = data.score;
+        comboMultiplier = data.comboMultiplier;
+        matchStreak = data.matchStreak;
+
+        LevelData level = levels[currentLevelIndex];
+        gridSize = new Vector2Int(data.gridWidth, data.gridHeight);
+        matchedPairs = 0;
+        ClearBoard();
+
+        gridLayoutGroup.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        gridLayoutGroup.constraintCount = gridSize.x;
+
+        Sprite[] cardFaces = level.levelCardFaces;
+        for (int i = 0; i < data.cardStates.Count; i++)
+        {
+            var obj = Instantiate(cardPrefab, cardsParent);
+            var card = obj.GetComponent<Card>();
+            card.cardID = data.cardStates[i].cardID;
+            card.Init(card.cardID, cardFaces[card.cardID]);
+
+            if (data.cardStates[i].isMatched)
+            {
+                card.Flip();
+                card.cardButton.interactable = false;
+                matchedPairs++;
+            }
+            else
+            {
+                card.ResetCard();
+                card.cardButton.interactable = true;
+            }
+
+            card.cardButton.onClick.AddListener(() => OnCardClick(card));
+            spawnedCards.Add(card);
+        }
+
+        UpdateScore();
+        Debug.Log("Game Loaded: Level " + currentLevelIndex);
+    }
+
+    void OnApplicationQuit() => SaveGame();
 }

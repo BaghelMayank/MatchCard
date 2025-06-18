@@ -8,7 +8,11 @@ public class SaveData
     public int comboMultiplier;
     public int score;
     public int matchStreak;
+    public int currentLevelIndex;
     public List<CardState> cardStates;
+    public int gridWidth;
+    public int gridHeight;
+    public int saveVersion;
 }
 
 [System.Serializable]
