@@ -46,6 +46,8 @@ public class GameManager : MonoBehaviour
     bool musicEnabled;
     private Card firstFlipped, secondFlipped;
     private List<Card> spawnedCards = new();
+    
+    public GameObject mainMenuPanel;
 
     void Start()
     {
@@ -74,7 +76,7 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            ShowLevelSelect();
+            ShowMainMenu();
         }
     }
 
@@ -87,6 +89,27 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    public void ShowMainMenu()
+    {
+        mainMenuPanel.SetActive(true);
+        gamePanel.SetActive(false);
+        levelSelectPanel.SetActive(false);
+        winPanel.SetActive(false);
+        levelCompletePanel.SetActive(false);
+        Time.timeScale = 1;
+    }
+    public void BackToMenu()
+    {
+        Time.timeScale = 1;
+        ClearBoard();
+        ShowMainMenu();
+        PlayerPrefs.DeleteKey("SaveData");
+    }
+    public void OnPlayButtonClicked()
+    {
+        mainMenuPanel.SetActive(false);
+        ShowLevelSelect();
+    }
     public void ShowLevelSelect()
     {
         levelSelectPanel.SetActive(true);
@@ -409,5 +432,9 @@ public class GameManager : MonoBehaviour
         UnityEngine.SceneManagement.SceneManager.LoadScene(0);
     }
 
-    void OnApplicationQuit() => SaveGame();
+   public void OnApplicationQuit()
+    {
+        SaveGame();
+        Application.Quit();
+    }
 }
